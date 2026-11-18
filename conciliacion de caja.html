@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FarmaControl Pro | Conciliación de Caja</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js para gráficos interactivos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- html2pdf.js para descarga directa de PDF limpio -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- FontAwesome para iconografía médica/financiera -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            emerald: '#10b981',
+                            teal: '#0d9488',
+                            cyan: '#06b6d4',
+                            blue: '#1e3a8a',
+                            indigo: '#4f46e5',
+                            purple: '#7c3aed',
+                            slate: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Estilos personalizados para scrollbars y transiciones suaves */
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        /* Ocultar flechas nativas de inputs numéricos para diseño limpio */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        /* Gradientes característicos Esmeralda -> Azul -> Morado */
+        .bg-gradient-pharma {
+            background: linear-gradient(135deg, #059669 0%, #0284c7 50%, #6d28d9 100%);
+        }
+        .bg-gradient-pharma-subtle {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(6, 182, 212, 0.1) 50%, rgba(124, 58, 237, 0.1) 100%);
+        }
+        .border-gradient-pharma {
+            border-image: linear-gradient(135deg, #10b981, #06b6d4, #7c3aed) 1;
+        }
+
+        /* Estilos exclusivos para impresión nativa (@media print) */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printable-report-area, #printable-report-area * {
+                visibility: visible;
+            }
+            #printable-report-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                background: white !important;
+                color: black !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Notificación Toast Flotante (Reemplazo elegante de alert) -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- BARRA DE NAVEGACIÓN SUPERIOR -->
+    <header class="sticky top-0 z-30 backdrop-blur-md bg-white/85 dark:bg-slate-900/85 border-b border-slate-200 dark:border-slate-800 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <!-- Logo e Identidad -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-pharma flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+                    <i class="fa-solid fa-staff-snake text-xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-bold text-lg sm:text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 via-cyan-600 to-indigo-600 dark:from-emerald-400 dark:via-cyan-400 dark:to-purple-400">
+                            FarmaControl Pro
+                        </h1>
+                        <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            CLP
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">Sistema de Arqueo y Conciliación de Caja</p>
+                </div>
+            </div>
+
+            <!-- Acciones Rápidas en Header -->
+            <div class="flex items-center gap-2 sm:gap-3">
+                <!-- Botón Cargar Ejemplo -->
+                <button onclick="cargarDatosEjemplo()" title="Cargar simulación realista de turno" class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs sm:text-sm font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span class="hidden md:inline">Ejemplo</span>
+                </button>
+
+                <!-- Botón Limpiar Todo -->
+                <button onclick="solicitarReinicio()" title="Reiniciar valores a cero" class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs sm:text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span class="hidden md:inline">Limpiar</span>
+                </button>
+
+                <!-- Botón Dark / Light Mode -->
+                <button id="theme-toggle" onclick="toggleTheme()" aria-label="Cambiar tema" class="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-amber-300 border border-slate-200 dark:border-slate-700 transition">
+                    <i id="theme-icon" class="fa-solid fa-moon"></i>
+                </button>
+
+                <!-- Botón Principal Exportar PDF -->
+                <button onclick="abrirVistaPreviaPDF()" class="px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white bg-gradient-pharma hover:opacity-95 shadow-md shadow-indigo-500/25 transition flex items-center gap-2">
+                    <i class="fa-solid fa-file-pdf"></i>
+                    <span>Exportar PDF</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- SECCIÓN 1: TARJETAS KPI SUPERIORES -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- KPI 1: Venta Total del Día -->
+            <div class="relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md transition">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-emerald-500/15 to-transparent rounded-bl-full pointer-events-none"></div>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Venta Total Sistema</span>
+                    <div class="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                        <i class="fa-solid fa-cash-register"></i>
+                    </div>
+                </div>
+                <div id="kpi-venta-total" class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                    $0
+                </div>
+                <div class="mt-2 flex items-center justify-between text-xs">
+                    <span id="kpi-boletas-info" class="text-slate-500 dark:text-slate-400">0 boletas emitidas</span>
+                    <span id="kpi-ticket-promedio" class="font-medium text-emerald-600 dark:text-emerald-400">Prom: $0</span>
+                </div>
+            </div>
+
+            <!-- KPI 2: Efectivo Físico Contado -->
+            <div class="relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md transition">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-cyan-500/15 to-transparent rounded-bl-full pointer-events-none"></div>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Efectivo Físico Caja</span>
+                    <div class="w-9 h-9 rounded-xl bg-cyan-100 dark:bg-cyan-950/80 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+                        <i class="fa-solid fa-money-bill-wave"></i>
+                    </div>
+                </div>
+                <div id="kpi-efectivo-fisico" class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                    $0
+                </div>
+                <div class="mt-2 flex items-center justify-between text-xs">
+                    <span class="text-slate-500 dark:text-slate-400">Esperado: <strong id="kpi-efectivo-esperado" class="text-slate-700 dark:text-slate-300">$0</strong></span>
+                    <span id="kpi-monedas-badge" class="font-medium text-cyan-600 dark:text-cyan-400">Monedas: $0</span>
+                </div>
+            </div>
+
+            <!-- KPI 3: Ventas Débito / Tarjetas -->
+            <div class="relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md transition">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-indigo-500/15 to-transparent rounded-bl-full pointer-events-none"></div>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Débito / POS Bancario</span>
+                    <div class="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                        <i class="fa-solid fa-credit-card"></i>
+                    </div>
+                </div>
+                <div id="kpi-venta-debito" class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                    $0
+                </div>
+                <div class="mt-2 flex items-center justify-between text-xs">
+                    <span class="text-slate-500 dark:text-slate-400">Participación digital</span>
+                    <span id="kpi-porcentaje-debito" class="font-semibold text-indigo-600 dark:text-indigo-400">0% del total</span>
+                </div>
+            </div>
+
+            <!-- KPI 4: Diferencia de Cuadratura -->
+            <div id="kpi-card-diferencia" class="relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 p-5 border-2 border-emerald-500/40 dark:border-emerald-500/30 shadow-sm hover:shadow-md transition">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Estado Cuadratura</span>
+                    <span id="kpi-estado-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                        CUADRADO
+                    </span>
+                </div>
+                <div id="kpi-diferencia" class="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 tracking-tight">
+                    $0
+                </div>
+                <div class="mt-2 flex items-center justify-between text-xs">
+                    <span id="kpi-diferencia-desc" class="text-slate-500 dark:text-slate-400">Sin diferencias detectadas</span>
+                    <i id="kpi-estado-icon" class="fa-solid fa-circle-check text-emerald-500 text-sm"></i>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECCIÓN 2: DATOS DEL TURNO Y MOVIMIENTOS POS (Panel Superior Expandible / Grid) -->
+        <section class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm p-5 sm:p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-100 dark:border-slate-800">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-base sm:text-lg text-slate-900 dark:text-white">Datos del Turno y Cierre Sistema (POS)</h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Ingresa los totales reportados por el sistema de farmacia y Transbank</p>
+                    </div>
+                </div>
+                <!-- Alerta de Validación Cruzada POS -->
+                <div id="alerta-cruzada-pos" class="hidden px-3 py-1.5 rounded-xl text-xs font-medium bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 flex items-center gap-2">
+                    <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+                    <span id="texto-alerta-pos">La suma de Efectivo + Débito no coincide con la Venta Total.</span>
+                </div>
+            </div>
+
+            <!-- Grid de Inputs del Turno -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Sucursal / Farmacia -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Sucursal / Farmacia</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i class="fa-solid fa-store text-xs"></i></span>
+                        <input type="text" id="input-sucursal" value="Farmacia Central - Caja 01" oninput="actualizarTodo()" class="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition">
+                    </div>
+                </div>
+
+                <!-- Fecha -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Fecha de Conciliación</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i class="fa-regular fa-calendar text-xs"></i></span>
+                        <input type="date" id="input-fecha" oninput="actualizarTodo()" class="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition">
+                    </div>
+                </div>
+
+                <!-- Turno -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Turno</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i class="fa-regular fa-clock text-xs"></i></span>
+                        <select id="input-turno" onchange="actualizarTodo()" class="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition">
+                            <option value="Turno Mañana (08:00 - 15:00)">Turno Mañana (08:00 - 15:00)</option>
+                            <option value="Turno Tarde (15:00 - 22:00)">Turno Tarde (15:00 - 22:00)</option>
+                            <option value="Día Completo (08:00 - 22:00)" selected>Día Completo (08:00 - 22:00)</option>
+                            <option value="Turno Noche / Urgencia">Turno Noche / Urgencia</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Cajero / Químico Responsable -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Cajero / Responsable</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400"><i class="fa-solid fa-user-doctor text-xs"></i></span>
+                        <input type="text" id="input-cajero" placeholder="Nombre del responsable" value="Camila Valenzuela" oninput="actualizarTodo()" class="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fila 2: Valores Financieros del Sistema -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/80">
+                <!-- Fondo Inicial de Caja -->
+                <div>
+                    <label class="block text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5">
+                        <i class="fa-solid fa-vault mr-1"></i>Fondo Inicial (Base)
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-semibold text-sm">$</span>
+                        <input type="number" id="input-fondo-inicial" min="0" step="100" value="50000" oninput="actualizarTodo()" class="w-full pl-7 pr-3 py-2.5 text-sm font-semibold rounded-xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 focus:ring-2 focus:ring-emerald-500 outline-none transition">
+                    </div>
+                </div>
+
+                <!-- Ventas Efectivo Sistema -->
+                <div>
+                    <label class="block text-xs font-semibold text-cyan-700 dark:text-cyan-400 mb-1.5">
+                        <i class="fa-solid fa-coins mr-1"></i>Ventas Efectivo (POS)
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-semibold text-sm">$</span>
+                        <input type="number" id="input-ventas-efectivo" min="0" step="10" value="0" oninput="sincronizarVentaTotal('efectivo')" class="w-full pl-7 pr-3 py-2.5 text-sm font-semibold rounded-xl bg-cyan-50/40 dark:bg-cyan-950/20 border border-cyan-200 dark:border-cyan-800/60 focus:ring-2 focus:ring-cyan-500 outline-none transition">
+                    </div>
+                </div>
+
+                <!-- Ventas Débito / Crédito -->
+                <div>
+                    <label class="block text-xs font-semibold text-indigo-700 dark:text-indigo-400 mb-1.5">
+                        <i class="fa-solid fa-credit-card mr-1"></i>Ventas Débito / Tarjeta
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-semibold text-sm">$</span>
+                        <input type="number" id="input-ventas-debito" min="0" step="10" value="0" oninput="sincronizarVentaTotal('debito')" class="w-full pl-7 pr-3 py-2.5 text-sm font-semibold rounded-xl bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/60 focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                    </div>
+                </div>
+
+                <!-- Retiros / Egresos de Caja -->
+                <div>
+                    <label class="block text-xs font-semibold text-rose-700 dark:text-rose-400 mb-1.5">
+                        <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>Retiros / Gastos Caja
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-semibold text-sm">$</span>
+                        <input type="number" id="input-egresos" min="0" step="10" value="0" oninput="actualizarTodo()" class="w-full pl-7 pr-3 py-2.5 text-sm font-semibold rounded-xl bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/60 focus:ring-2 focus:ring-rose-500 outline-none transition">
+                    </div>
+                </div>
+
+                <!-- Ventas Totales Sistema + Boletas -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="col-span-2">
+                        <label class="block text-xs font-semibold text-purple-700 dark:text-purple-400 mb-1.5">
+                            Venta Total POS
+                        </label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 font-semibold text-sm">$</span>
+                            <input type="number" id="input-venta-total-pos" min="0" step="10" value="0" oninput="actualizarTodo()" class="w-full pl-6 pr-2 py-2.5 text-sm font-bold rounded-xl bg-purple-50/40 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/60 focus:ring-2 focus:ring-purple-500 outline-none transition">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5" title="Cantidad de boletas emitidas">
+                            Boletas
+                        </label>
+                        <input type="number" id="input-boletas" min="0" value="0" oninput="actualizarTodo()" class="w-full px-2.5 py-2.5 text-sm font-semibold text-center rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-purple-500 outline-none transition">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Checkbox de auto-suma de Venta Total POS -->
+            <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" id="chk-autosuma-pos" checked onchange="actualizarTodo()" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                    <span>Calcular automáticamente <strong>Venta Total POS</strong> (Efectivo + Débito)</span>
+                </label>
+                <div class="flex items-center gap-2">
+                    <span>Detalle de egresos/observaciones:</span>
+                    <input type="text" id="input-observaciones" placeholder="Ej: Pago flete insumos, compra agua, vuelto..." oninput="actualizarTodo()" class="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 w-64 sm:w-80 outline-none focus:border-cyan-500">
+                </div>
+            </div>
+        </section>
+
+        <!-- SECCIÓN 3: ARQUEO DE EFECTIVO (BILLETES Y MONEDAS CLP) + ANÁLISIS VISUAL -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- COLUMNA IZQUIERDA (7 cols): ARQUEO DE BILLETES Y MONEDAS -->
+            <section class="lg:col-span-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm p-5 sm:p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                                <i class="fa-solid fa-money-bill-1-wave"></i>
+                            </div>
+                            <div>
+                                <h2 class="font-bold text-base sm:text-lg text-slate-900 dark:text-white">Arqueo Físico de Efectivo (CLP)</h2>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Cuenta los billetes y monedas disponibles en gaveta</p>
+                            </div>
+                        </div>
+                        <button onclick="limpiarArqueo()" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 dark:bg-slate-800 dark:hover:bg-rose-950/50 dark:text-slate-400 dark:hover:text-rose-400 transition">
+                            <i class="fa-solid fa-eraser mr-1"></i>Cero conteo
+                        </button>
+                    </div>
+
+                    <!-- Subsección Billetes y Monedas en 2 columnas en desktop -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- BILLETES -->
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-money-bill"></i> Billetes
+                                </span>
+                                <span id="subtotal-billetes-header" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                    $0
+                                </span>
+                            </div>
+                            <div id="lista-billetes" class="space-y-2.5">
+                                <!-- Renderizado dinámicamente por JS -->
+                            </div>
+                        </div>
+
+                        <!-- MONEDAS -->
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-coins"></i> Monedas (Sencillo)
+                                </span>
+                                <span id="subtotal-monedas-header" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+                                    $0
+                                </span>
+                            </div>
+                            <div id="lista-monedas" class="space-y-2.5">
+                                <!-- Renderizado dinámicamente por JS -->
+                            </div>
+
+                            <!-- Indicador de Salud de Sencillo / Monedas -->
+                            <div class="mt-4 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/70">
+                                <div class="flex items-center justify-between text-xs mb-1.5">
+                                    <span class="font-semibold text-slate-700 dark:text-slate-300">Proporción Monedas vs Billetes</span>
+                                    <span id="ratio-monedas-texto" class="font-bold text-indigo-600 dark:text-indigo-400">0% monedas</span>
+                                </div>
+                                <div class="w-full h-2.5 bg-emerald-200 dark:bg-emerald-950 rounded-full overflow-hidden flex">
+                                    <div id="barra-monedas" class="bg-indigo-600 dark:bg-indigo-400 h-full transition-all duration-300" style="width: 0%"></div>
+                                </div>
+                                <p id="mensaje-sencillo" class="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
+                                    Ingresa las monedas para evaluar disponibilidad de vuelto.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Barra Resumen Inferior del Arqueo -->
+                <div class="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gradient-pharma-subtle p-4 rounded-xl">
+                    <div>
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">Total Efectivo Físico Contado</span>
+                        <span class="text-xs text-slate-500 dark:text-slate-400" id="total-piezas-contadas">0 billetes y 0 monedas</span>
+                    </div>
+                    <div id="total-arqueo-display" class="text-2xl sm:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 via-cyan-600 to-indigo-600 dark:from-emerald-400 dark:via-cyan-400 dark:to-purple-400">
+                        $0
+                    </div>
+                </div>
+            </section>
+
+            <!-- COLUMNA DERECHA (5 cols): RESUMEN DE CUADRATURA Y GRÁFICOS -->
+            <section class="lg:col-span-5 flex flex-col gap-6">
+
+                <!-- Tarjeta de Desglose Matemático de Conciliación -->
+                <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm p-5 sm:p-6">
+                    <div class="flex items-center gap-2.5 pb-3 mb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div class="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                            <i class="fa-solid fa-scale-balanced"></i>
+                        </div>
+                        <div>
+                            <h2 class="font-bold text-base text-slate-900 dark:text-white">Cuadratura de Caja</h2>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">Comparativa entre sistema y dinero físico</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2.5 text-sm">
+                        <div class="flex justify-between items-center py-1">
+                            <span class="text-slate-600 dark:text-slate-400">(+) Fondo Inicial de Caja</span>
+                            <span id="calc-fondo" class="font-semibold text-slate-800 dark:text-slate-200">$0</span>
+                        </div>
+                        <div class="flex justify-between items-center py-1">
+                            <span class="text-slate-600 dark:text-slate-40">(+) Ventas Efectivo Sistema</span>
+                            <span id="calc-ventas-ef" class="font-semibold text-cyan-600 dark:text-cyan-400">$0</span>
+                        </div>
+                        <div class="flex justify-between items-center py-1">
+                            <span class="text-slate-600 dark:text-slate-400">(-) Retiros / Gastos Menores</span>
+                            <span id="calc-egresos" class="font-semibold text-rose-600 dark:text-rose-400">-$0</span>
+                        </div>
+                        <div class="flex justify-between items-center py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800/90 font-bold">
+                            <span class="text-slate-700 dark:text-slate-200">(=) Efectivo Esperado en Caja</span>
+                            <span id="calc-esperado" class="text-slate-900 dark:text-white">$0</span>
+                        </div>
+                        <div class="flex justify-between items-center py-2 px-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 font-bold border border-emerald-200/60 dark:border-emerald-800/50">
+                            <span class="text-emerald-800 dark:text-emerald-300">Efectivo Físico Arqueado</span>
+                            <span id="calc-fisico" class="text-emerald-700 dark:text-emerald-400">$0</span>
+                        </div>
+
+                        <!-- Resultado Final Diferencia -->
+                        <div id="caja-resultado-banner" class="mt-3 p-3.5 rounded-xl bg-emerald-100/80 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 flex items-center justify-between">
+                            <div class="flex items-center gap-2.5">
+                                <i id="banner-icon" class="fa-solid fa-circle-check text-xl text-emerald-600 dark:text-emerald-400"></i>
+                                <div>
+                                    <span id="banner-titulo" class="block text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">Caja Cuadrada</span>
+                                    <span id="banner-subtitulo" class="text-xs text-emerald-700 dark:text-emerald-400">Diferencia: $0</span>
+                                </div>
+                            </div>
+                            <span id="banner-monto" class="text-lg font-extrabold text-emerald-800 dark:text-emerald-300">$0</span>
+                        </div>
+
+                        <!-- Sugerencia de Depósito / Entrega a Bóveda -->
+                        <div class="pt-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                            <span>Efectivo a retirar (dejando fondo base):</span>
+                            <strong id="calc-retiro-boveda" class="text-indigo-600 dark:text-indigo-400 text-sm">$0</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gráficos Interactivos -->
+                <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm p-5 sm:p-6 flex-grow">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-chart-pie text-cyan-500"></i> Análisis Visual del Día
+                        </h3>
+                        <!-- Selector de vista de gráfico -->
+                        <div class="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 text-xs">
+                            <button id="tab-chart-medios" onclick="cambiarGrafico('medios')" class="px-2.5 py-1 rounded-md font-medium bg-white dark:bg-slate-700 text-indigo-600 dark:text-cyan-300 shadow-sm transition">
+                                Medios Pago
+                            </button>
+                            <button id="tab-chart-denom" onclick="cambiarGrafico('denominaciones')" class="px-2.5 py-1 rounded-md font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 transition">
+                                Billetes/Monedas
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="relative h-56 w-full flex items-center justify-center">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                </div>
+
+            </section>
+        </div>
+
+    </main>
+
+    <!-- FOOTER DISCRETO -->
+    <footer class="border-t border-slate-200 dark:border-slate-800 py-4 px-4 text-center text-xs text-slate-500 dark:text-slate-400">
+        FarmaControl Pro &bull; Herramienta de Conciliación y Arqueo de Caja Farmacéutica (CLP) &bull; Datos guardados localmente en tu navegador.
+    </footer>
+
+    <!-- MODAL DE VISTA PREVIA Y EXPORTACIÓN PDF -->
+    <div id="modal-pdf" class="fixed inset-0 z-50 hidden bg-slate-950/75 backdrop-blur-sm overflow-y-auto p-3 sm:p-6 flex items-start justify-center">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-4">
+            
+            <!-- Barra superior del Modal -->
+            <div class="px-5 py-4 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3 no-print">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-pharma text-white flex items-center justify-center">
+                        <i class="fa-solid fa-file-contract"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm sm:text-base text-slate-900 dark:text-white">Vista Previa del Comprobante de Cierre</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Revisa el documento antes de descargarlo en PDF o imprimirlo</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="imprimirReporteNativo()" class="px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-print"></i> Imprimir
+                    </button>
+                    <button id="btn-descargar-pdf" onclick="descargarPDFDirecto()" class="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-pharma hover:opacity-95 shadow-md transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-download"></i> Descargar PDF
+                    </button>
+                    <button onclick="cerrarModalPDF()" class="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ÁREA IMPRIMIBLE / EXPORTABLE A PDF (Fondo siempre blanco para impresión limpia) -->
+            <div class="p-4 sm:p-8 bg-slate-200/60 dark:bg-slate-950/60 overflow-x-auto">
+                <div id="printable-report-area" class="bg-white text-slate-800 max-w-[800px] mx-auto p-6 sm:p-10 rounded-xl shadow-sm border border-slate-200">
+                    
+                    <!-- Encabezado Formal del Comprobante -->
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-5 mb-6 border-b-2 border-emerald-600 gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-600 via-cyan-600 to-indigo-700 flex items-center justify-center text-white text-2xl">
+                                <i class="fa-solid fa-staff-snake"></i>
+                            </div>
+                            <div>
+                                <h1 class="text-xl font-extrabold text-slate-900 tracking-tight uppercase">Acta de Conciliación de Caja</h1>
+                                <p id="pdf-sucursal" class="text-sm font-semibold text-emerald-700">Farmacia Central - Caja 01</p>
+                            </div>
+                        </div>
+                        <div class="text-left sm:text-right text-xs text-slate-600 space-y-0.5">
+                            <p><strong class="text-slate-800">Folio Cierre:</strong> <span id="pdf-folio">#FC-2026-001</span></p>
+                            <p><strong class="text-slate-800">Fecha:</strong> <span id="pdf-fecha">13/11/2026</span></p>
+                            <p><strong class="text-slate-800">Turno:</strong> <span id="pdf-turno">Día Completo</span></p>
+                            <p><strong class="text-slate-800">Responsable:</strong> <span id="pdf-cajero">Camila Valenzuela</span></p>
+                        </div>
+                    </div>
+
+                    <!-- Resumen Ejecutivo KPIs en PDF -->
+                    <div class="grid grid-cols-4 gap-3 mb-6">
+                        <div class="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                            <span class="block text-[10px] font-bold uppercase text-slate-500">Venta Total POS</span>
+                            <span id="pdf-kpi-venta" class="text-base font-extrabold text-slate-900">$0</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                            <span class="block text-[10px] font-bold uppercase text-slate-500">Ventas Débito/POS</span>
+                            <span id="pdf-kpi-debito" class="text-base font-extrabold text-indigo-700">$0</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                            <span class="block text-[10px] font-bold uppercase text-slate-500">Efectivo Arqueado</span>
+                            <span id="pdf-kpi-fisico" class="text-base font-extrabold text-emerald-700">$0</span>
+                        </div>
+                        <div id="pdf-kpi-diff-box" class="p-3 rounded-lg bg-emerald-50 border border-emerald-300">
+                            <span class="block text-[10px] font-bold uppercase text-emerald-800">Diferencia Caja</span>
+                            <span id="pdf-kpi-diferencia" class="text-base font-extrabold text-emerald-800">$0</span>
+                        </div>
+                    </div>
+
+                    <!-- Cuerpo en 2 Columnas: Tabla de Arqueo + Cuadratura Contable -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        
+                        <!-- Tabla Completa de Billetes y Monedas -->
+                        <div>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-emerald-600"></span> Detalle de Arqueo Físico (CLP)
+                            </h3>
+                            <table class="w-full text-xs border-collapse border border-slate-200">
+                                <thead>
+                                    <tr class="bg-slate-100 text-slate-700">
+                                        <th class="border border-slate-200 py-1.5 px-2.5 text-left">Denominación</th>
+                                        <th class="border border-slate-200 py-1.5 px-2.5 text-center">Cant.</th>
+                                        <th class="border border-slate-200 py-1.5 px-2.5 text-right">Subtotal</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pdf-tabla-arqueo">
+                                    <!-- Filas generadas dinámicamente -->
+                                </tbody>
+                                <tfoot>
+                                    <tr class="bg-emerald-50 font-bold text-slate-900">
+                                        <td colspan="2" class="border border-slate-200 py-2 px-2.5 text-right">TOTAL EFECTIVO CONTADO:</td>
+                                        <td id="pdf-total-arqueo" class="border border-slate-200 py-2 px-2.5 text-right text-emerald-700">$0</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        <!-- Cuadratura Contable y Distribución -->
+                        <div class="flex flex-col justify-between">
+                            <div>
+                                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center gap-1.5">
+                                    <span class="w-2 h-2 rounded-full bg-indigo-600"></span> Resumen Contable del Turno
+                                </h3>
+                                <table class="w-full text-xs border-collapse border border-slate-200 mb-4">
+                                    <tbody>
+                                        <tr>
+                                            <td class="border border-slate-200 py-1.5 px-2.5 text-slate-600">(+) Fondo Inicial Base</td>
+                                            <td id="pdf-res-fondo" class="border border-slate-200 py-1.5 px-2.5 text-right font-semibold">$0</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="border border-slate-200 py-1.5 px-2.5 text-slate-600">(+) Ventas en Efectivo (POS)</td>
+                                            <td id="pdf-res-ventas-ef" class="border border-slate-200 py-1.5 px-2.5 text-right font-semibold">$0</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="border border-slate-200 py-1.5 px-2.5 text-slate-600">(-) Retiros / Gastos de Caja</td>
+                                            <td id="pdf-res-egresos" class="border border-slate-200 py-1.5 px-2.5 text-right font-semibold text-rose-600">-$0</td>
+                                        </tr>
+                                        <tr class="bg-slate-100 font-bold">
+                                            <td class="border border-slate-200 py-1.5 px-2.5 text-slate-800">(=) Efectivo Esperado en Caja</td>
+                                            <td id="pdf-res-esperado" class="border border-slate-200 py-1.5 px-2.5 text-right">$0</td>
+                                        </tr>
+                                        <tr class="bg-slate-50 font-bold">
+                                            <td class="border border-slate-200 py-1.5 px-2.5 text-slate-800">(=) Efectivo Físico Contado</td>
+                                            <td id="pdf-res-fisico" class="border border-slate-200 py-1.5 px-2.5 text-right text-emerald-700">$0</td>
+                                        </tr>
+                                        <tr id="pdf-res-diff-row" class="bg-emerald-50 font-extrabold">
+                                            <td class="border border-slate-200 py-2 px-2.5 text-emerald-900">DIFERENCIA (<span id="pdf-res-estado">CUADRADO</span>)</td>
+                                            <td id="pdf-res-diferencia" class="border border-slate-200 py-2 px-2.5 text-right text-emerald-800">$0</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <!-- Datos Complementarios -->
+                                <div class="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-1">
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-500">Total Billetes vs Monedas:</span>
+                                        <span id="pdf-desglose-bm" class="font-semibold text-slate-700">$0 / $0</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-500">Monto a Retirar (Sobrepaso Base):</span>
+                                        <span id="pdf-retiro-boveda" class="font-bold text-indigo-700">$0</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-500">Boletas Emitidas / Ticket Promedio:</span>
+                                        <span id="pdf-boletas-prom" class="font-semibold text-slate-700">0 / $0</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Observaciones -->
+                            <div class="mt-4">
+                                <span class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Observaciones / Detalle Egresos:</span>
+                                <p id="pdf-observaciones" class="text-xs text-slate-700 p-2.5 rounded-lg border border-slate-200 bg-slate-50/60 min-h-[42px]">
+                                    Sin observaciones registradas.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Espacio para Firmas Formales -->
+                    <div class="mt-10 pt-6 border-t border-slate-200 grid grid-cols-2 gap-10 text-center text-xs">
+                        <div>
+                            <div class="h-12 border-b border-slate-400 w-3/4 mx-auto mb-2"></div>
+                            <p class="font-bold text-slate-800" id="pdf-firma-cajero">Camila Valenzuela</p>
+                            <p class="text-slate-500">Firma Cajero / Químico Responsable</p>
+                        </div>
+                        <div>
+                            <div class="h-12 border-b border-slate-400 w-3/4 mx-auto mb-2"></div>
+                            <p class="font-bold text-slate-800">V°B° Jefatura / Supervisor</p>
+                            <p class="text-slate-500">Firma Recepción y Conformidad</p>
+                        </div>
+                    </div>
+
+                    <!-- Pie de página del PDF -->
+                    <div class="mt-6 pt-3 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400">
+                        <span>Generado por FarmaControl Pro • Sistema de Conciliación de Caja</span>
+                        <span id="pdf-timestamp">Emitido el 13/11/2026</span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CONFIRMACIÓN PARA REINICIAR (Sin usar confirm()) -->
+    <div id="modal-confirmar-reinicio" class="fixed inset-0 z-50 hidden bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl">
+            <div class="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl mb-4 mx-auto">
+                <i class="fa-solid fa-rotate-left"></i>
+            </div>
+            <h3 class="text-lg font-bold text-center text-slate-900 dark:text-white mb-2">¿Reiniciar toda la caja?</h3>
+            <p class="text-xs text-center text-slate-500 dark:text-slate-400 mb-6">
+                Se pondrán en cero todos los conteos de billetes, monedas y ventas del turno actual.
+            </p>
+            <div class="flex gap-3">
+                <button onclick="cerrarModalReinicio()" class="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition">
+                    Cancelar
+                </button>
+                <button onclick="ejecutarReinicioCompleto()" class="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-500/20 transition">
+                    Sí, reiniciar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LÓGICA JAVASCRIPT -->
+    <script>
+        // ==========================================
+        // 1. CONFIGURACIÓN DE DENOMINACIONES CLP
+        // ==========================================
+        const BILLETES = [
+            { valor: 20000, etiqueta: '$20.000', colorBadge: 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-200 dark:border-amber-800' },
+            { valor: 10000, etiqueta: '$10.000', colorBadge: 'bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300 border-sky-200 dark:border-sky-800' },
+            { valor: 5000,  etiqueta: '$5.000',  colorBadge: 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border-rose-200 dark:border-rose-800' },
+            { valor: 2000,  etiqueta: '$2.000',  colorBadge: 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border-purple-200 dark:border-purple-800' },
+            { valor: 1000,  etiqueta: '$1.000',  colorBadge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' }
+        ];
+
+        const MONEDAS = [
+            { valor: 500, etiqueta: '$500', colorBadge: 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-200 dark:border-amber-800' },
+            { valor: 100, etiqueta: '$100', colorBadge: 'bg-orange-100 text-orange-800 dark:bg-orange-950/70 dark:text-orange-300 border-orange-200 dark:border-orange-800' },
+            { valor: 50,  etiqueta: '$50',  colorBadge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/70 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800' },
+            { valor: 10,  etiqueta: '$10',  colorBadge: 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700' }
+        ];
+
+        // Estado global de cantidades
+        let conteoDenominaciones = {};
+        let tipoGraficoActual = 'medios'; // 'medios' | 'denominaciones'
+        let chartInstance = null;
+
+        // Formateador de moneda CLP
+        const formatoCLP = new Intl.NumberFormat('es-CL', {
+            style: 'currency',
+            currency: 'CLP',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        });
+
+        function formatMoney(valor) {
+            return formatoCLP.format(Math.round(valor || 0));
+        }
+
+        // ==========================================
+        // 2. INICIALIZACIÓN Y RENDER DE CONTADORES
+        // ==========================================
+        window.onload = function () {
+            // Establecer fecha actual por defecto
+            const hoy = new Date();
+            const yyyy = hoy.getFullYear();
+            const mm = String(hoy.getMonth() + 1).padStart(2, '0');
+            const dd = String(hoy.getDate()).padStart(2, '0');
+            document.getElementById('input-fecha').value = `${yyyy}-${mm}-${dd}`;
+
+            // Inicializar conteos en 0
+            [...BILLETES, ...MONEDAS].forEach(d => {
+                conteoDenominaciones[d.valor] = 0;
+            });
+
+            renderizarFilasArqueo();
+            cargarDesdeLocalStorage();
+            inicializarGrafico();
+            actualizarTodo();
+        };
+
+        function renderizarFilasArqueo() {
+            const contBilletes = document.getElementById('lista-billetes');
+            const contMonedas = document.getElementById('lista-monedas');
+
+            contBilletes.innerHTML = BILLETES.map(b => crearHTMLFilaDenominacion(b, 'billete')).join('');
+            contMonedas.innerHTML = MONEDAS.map(m => crearHTMLFilaDenominacion(m, 'moneda')).join('');
+        }
+
+        function crearHTMLFilaDenominacion(item, tipo) {
+            const icono = tipo === 'billete' ? 'fa-money-bill-1' : 'fa-coins';
+            return `
+                <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/70 hover:border-cyan-400 dark:hover:border-cyan-600 transition">
+                    <!-- Etiqueta Denominación -->
+                    <div class="flex items-center gap-2 min-w-[92px]">
+                        <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold border ${item.colorBadge} flex items-center gap-1.5">
+                            <i class="fa-solid ${icono} text-[10px] opacity-80"></i>
+                            ${item.etiqueta}
+                        </span>
+                    </div>
+
+                    <!-- Controles +/- e Input Directo -->
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" onclick="modificarCantidad(${item.valor}, -1)" aria-label="Restar ${item.etiqueta}" class="w-8 h-8 rounded-lg bg-white dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/60 text-slate-600 dark:text-slate-300 hover:text-rose-600 border border-slate-200 dark:border-slate-600 flex items-center justify-center font-bold transition active:scale-95">
+                            <i class="fa-solid fa-minus text-xs"></i>
+                        </button>
+                        <input type="number" id="cant-${item.valor}" min="0" value="0" oninput="setCantidadDirecta(${item.valor}, this.value)" onfocus="this.select()" class="w-14 h-8 text-center text-sm font-bold rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-cyan-500 outline-none">
+                        <button type="button" onclick="modificarCantidad(${item.valor}, 1)" aria-label="Sumar ${item.etiqueta}" class="w-8 h-8 rounded-lg bg-white dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 text-slate-600 dark:text-slate-300 hover:text-emerald-600 border border-slate-200 dark:border-slate-600 flex items-center justify-center font-bold transition active:scale-95">
+                            <i class="fa-solid fa-plus text-xs"></i>
+                        </button>
+                    </div>
+
+                    <!-- Subtotal -->
+                    <div class="text-right min-w-[85px]">
+                        <span id="sub-${item.valor}" class="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200">$0</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function modificarCantidad(valor, delta) {
+            const actual = conteoDenominaciones[valor] || 0;
+            const nuevo = Math.max(0, actual + delta);
+            conteoDenominaciones[valor] = nuevo;
+            document.getElementById(`cant-${valor}`).value = nuevo;
+            actualizarTodo();
+        }
+
+        function setCantidadDirecta(valor, rawVal) {
+            const parsed = parseInt(rawVal, 10);
+            const nuevo = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+            conteoDenominaciones[valor] = nuevo;
+            actualizarTodo();
+        }
+
+        // ==========================================
+        // 3. CÁLCULOS FINANCIEROS Y ACTUALIZACIÓN UI
+        // ==========================================
+        function sincronizarVentaTotal(origen) {
+            const chkAuto = document.getElementById('chk-autosuma-pos').checked;
+            if (chkAuto) {
+                const ef = parseFloat(document.getElementById('input-ventas-efectivo').value) || 0;
+                const deb = parseFloat(document.getElementById('input-ventas-debito').value) || 0;
+                document.getElementById('input-venta-total-pos').value = ef + deb;
+            }
+            actualizarTodo();
+        }
+
+        function actualizarTodo() {
+            // 1. Calcular subtotales de billetes y monedas
+            let totalBilletes = 0;
+            let cantBilletes = 0;
+            BILLETES.forEach(b => {
+                const c = conteoDenominaciones[b.valor] || 0;
+                const sub = c * b.valor;
+                totalBilletes += sub;
+                cantBilletes += c;
+                const elSub = document.getElementById(`sub-${b.valor}`);
+                if (elSub) elSub.textContent = formatMoney(sub);
+            });
+
+            let totalMonedas = 0;
+            let cantMonedas = 0;
+            MONEDAS.forEach(m => {
+                const c = conteoDenominaciones[m.valor] || 0;
+                const sub = c * m.valor;
+                totalMonedas += sub;
+                cantMonedas += c;
+                const elSub = document.getElementById(`sub-${m.valor}`);
+                if (elSub) elSub.textContent = formatMoney(sub);
+            });
+
+            const totalEfectivoFisico = totalBilletes + totalMonedas;
+
+            // Actualizar encabezados del arqueo
+            document.getElementById('subtotal-billetes-header').textContent = formatMoney(totalBilletes);
+            document.getElementById('subtotal-monedas-header').textContent = formatMoney(totalMonedas);
+            document.getElementById('total-arqueo-display').textContent = formatMoney(totalEfectivoFisico);
+            document.getElementById('total-piezas-contadas').textContent = `${cantBilletes} billetes y ${cantMonedas} monedas`;
+
+            // Barra de proporción Monedas vs Billetes
+            const pctMonedas = totalEfectivoFisico > 0 ? Math.round((totalMonedas / totalEfectivoFisico) * 100) : 0;
+            document.getElementById('ratio-monedas-texto').textContent = `${pctMonedas}% monedas`;
+            document.getElementById('barra-monedas').style.width = `${pctMonedas}%`;
+
+            const msgSencillo = document.getElementById('mensaje-sencillo');
+            if (totalEfectivoFisico === 0) {
+                msgSencillo.textContent = 'Ingresa las monedas para evaluar disponibilidad de vuelto.';
+            } else if (totalMonedas < 15000) {
+                msgSencillo.innerHTML = '<span class="text-amber-600 dark:text-amber-400 font-medium"><i class="fa-solid fa-circle-info mr-1"></i>Bajo nivel de sencillo:</span> Considera pedir cambio para el próximo turno.';
+            } else {
+                msgSencillo.innerHTML = '<span class="text-emerald-600 dark:text-emerald-400 font-medium"><i class="fa-solid fa-check mr-1"></i>Buen nivel de sencillo:</span> Suficiente cambio disponible en gaveta.';
+            }
+
+            // 2. Leer valores del Turno / Sistema POS
+            const fondoInicial = parseFloat(document.getElementById('input-fondo-inicial').value) || 0;
+            const ventasEfectivo = parseFloat(document.getElementById('input-ventas-efectivo').value) || 0;
+            const ventasDebito = parseFloat(document.getElementById('input-ventas-debito').value) || 0;
+            const egresos = parseFloat(document.getElementById('input-egresos').value) || 0;
+            const boletas = parseInt(document.getElementById('input-boletas').value, 10) || 0;
+
+            const chkAuto = document.getElementById('chk-autosuma-pos').checked;
+            const inputVentaTotal = document.getElementById('input-venta-total-pos');
+            if (chkAuto) {
+                inputVentaTotal.value = ventasEfectivo + ventasDebito;
+                inputVentaTotal.readOnly = true;
+                inputVentaTotal.classList.add('opacity-80');
+            } else {
+                inputVentaTotal.readOnly = false;
+                inputVentaTotal.classList.remove('opacity-80');
+            }
+            const ventaTotalPOS = parseFloat(inputVentaTotal.value) || 0;
+
+            // Validación cruzada POS
+            const sumaMedios = ventasEfectivo + ventasDebito;
+            const alertaPOS = document.getElementById('alerta-cruzada-pos');
+            if (!chkAuto && Math.abs(ventaTotalPOS - sumaMedios) > 0) {
+                const diffPOS = ventaTotalPOS - sumaMedios;
+                document.getElementById('texto-alerta-pos').textContent =
+                    `Diferencia en POS: Venta Total (${formatMoney(ventaTotalPOS)}) vs Suma Medios (${formatMoney(sumaMedios)}). Dif: ${formatMoney(diffPOS)}`;
+                alertaPOS.classList.remove('hidden');
+            } else {
+                alertaPOS.classList.add('hidden');
+            }
+
+            // 3. Cálculos de Conciliación
+            const efectivoEsperado = fondoInicial + ventasEfectivo - egresos;
+            const diferencia = totalEfectivoFisico - efectivoEsperado;
+            const retiroBoveda = Math.max(0, totalEfectivoFisico - fondoInicial);
+
+            // Actualizar tarjetas KPI
+            document.getElementById('kpi-venta-total').textContent = formatMoney(ventaTotalPOS);
+            const ticketPromedio = boletas > 0 ? ventaTotalPOS / boletas : 0;
+            document.getElementById('kpi-boletas-info').textContent = `${boletas} boletas emitidas`;
+            document.getElementById('kpi-ticket-promedio').textContent = `Prom: ${formatMoney(ticketPromedio)}`;
+
+            document.getElementById('kpi-efectivo-fisico').textContent = formatMoney(totalEfectivoFisico);
+            document.getElementById('kpi-efectivo-esperado').textContent = formatMoney(efectivoEsperado);
+            document.getElementById('kpi-monedas-badge').textContent = `Monedas: ${formatMoney(totalMonedas)}`;
+
+            document.getElementById('kpi-venta-debito').textContent = formatMoney(ventasDebito);
+            const pctDebito = ventaTotalPOS > 0 ? Math.round((ventasDebito / ventaTotalPOS) * 100) : 0;
+            document.getElementById('kpi-porcentaje-debito').textContent = `${pctDebito}% del total`;
+
+            // Actualizar tarjeta Desglose Cuadratura
+            document.getElementById('calc-fondo').textContent = formatMoney(fondoInicial);
+            document.getElementById('calc-ventas-ef').textContent = formatMoney(ventasEfectivo);
+            document.getElementById('calc-egresos').textContent = `-${formatMoney(egresos)}`;
+            document.getElementById('calc-esperado').textContent = formatMoney(efectivoEsperado);
+            document.getElementById('calc-fisico').textContent = formatMoney(totalEfectivoFisico);
+            document.getElementById('calc-retiro-boveda').textContent = formatMoney(retiroBoveda);
+
+            // Actualizar Estados Visuales (Cuadrado / Sobrante / Faltante)
+            actualizarEstilosEstadoCuadratura(diferencia);
+
+            // Actualizar Gráfico
+            actualizarDatosGrafico({
+                ventasEfectivo,
+                ventasDebito,
+                totalBilletes,
+                totalMonedas
+            });
+
+            // Persistir en LocalStorage
+            guardarEnLocalStorage();
+        }
+
+        function actualizarEstilosEstadoCuadratura(diferencia) {
+            const kpiCard = document.getElementById('kpi-card-diferencia');
+            const kpiBadge = document.getElementById('kpi-estado-badge');
+            const kpiDif = document.getElementById('kpi-diferencia');
+            const kpiDesc = document.getElementById('kpi-diferencia-desc');
+            const kpiIcon = document.getElementById('kpi-estado-icon');
+
+            const banner = document.getElementById('caja-resultado-banner');
+            const bannerIcon = document.getElementById('banner-icon');
+            const bannerTitulo = document.getElementById('banner-titulo');
+            const bannerSub = document.getElementById('banner-subtitulo');
+            const bannerMonto = document.getElementById('banner-monto');
+
+            const signo = diferencia > 0 ? '+' : '';
+            const montoFormateado = `${signo}${formatMoney(diferencia)}`;
+
+            kpiDif.textContent = montoFormateado;
+            bannerMonto.textContent = montoFormateado;
+
+            if (diferencia === 0) {
+                // ESTADO: CUADRADO EXACTO (Esmeralda)
+                kpiCard.className = 'relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 p-5 border-2 border-emerald-500/50 shadow-sm transition';
+                kpiBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300';
+                kpiBadge.textContent = 'CUADRADO';
+                kpiDif.className = 'text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 tracking-tight';
+                kpiDesc.textContent = 'Conciliación exacta sin desfase';
+                kpiIcon.className = 'fa-solid fa-circle-check text-emerald-500 text-sm';
+
+                banner.className = 'mt-3 p-3.5 rounded-xl bg-emerald-100/80 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 flex items-center justify-between';
+                bannerIcon.className = 'fa-solid fa-circle-check text-xl text-emerald-600 dark:text-emerald-400';
+                bannerTitulo.className = 'block text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300';
+                bannerTitulo.textContent = 'Caja Cuadrada Exacta';
+                bannerSub.className = 'text-xs text-emerald-700 dark:text-emerald-400';
+                bannerSub.textContent = 'El efectivo físico coincide con el sistema';
+                bannerMonto.className = 'text-lg font-extrabold text-emerald-800 dark:text-emerald-300';
+
+            } else if (diferencia > 0) {
+                // ESTADO: SOBRANTE (Azul / Índigo)
+                kpiCard.className = 'relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 p-5 border-2 border-indigo-500/50 shadow-sm transition';
+                kpiBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300';
+                kpiBadge.textContent = 'SOBRANTE';
+                kpiDif.className = 'text-2xl sm:text-3xl font-extrabold text-indigo-600 dark:text-indigo-400 tracking-tight';
+                kpiDesc.textContent = 'Efectivo físico superior al esperado';
+                kpiIcon.className = 'fa-solid fa-circle-plus text-indigo-500 text-sm';
+
+                banner.className = 'mt-3 p-3.5 rounded-xl bg-indigo-100/80 dark:bg-indigo-950/60 border border-indigo-300 dark:border-indigo-800 flex items-center justify-between';
+                bannerIcon.className = 'fa-solid fa-circle-plus text-xl text-indigo-600 dark:text-indigo-400';
+                bannerTitulo.className = 'block text-xs font-bold uppercase tracking-wider text-indigo-800 dark:text-indigo-300';
+                bannerTitulo.textContent = 'Sobrante de Caja';
+                bannerSub.className = 'text-xs text-indigo-700 dark:text-indigo-400';
+                bannerSub.textContent = 'Revisar boletas no registradas o vueltos';
+                bannerMonto.className = 'text-lg font-extrabold text-indigo-800 dark:text-indigo-300';
+
+            } else {
+                // ESTADO: FALTANTE (Alerta Rose/Ámbar)
+                kpiCard.className = 'relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 p-5 border-2 border-rose-500/60 shadow-sm transition';
+                kpiBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300';
+                kpiBadge.textContent = 'FALTANTE';
+                kpiDif.className = 'text-2xl sm:text-3xl font-extrabold text-rose-600 dark:text-rose-400 tracking-tight';
+                kpiDesc.textContent = 'Efectivo físico menor al esperado';
+                kpiIcon.className = 'fa-solid fa-triangle-exclamation text-rose-500 text-sm';
+
+                banner.className = 'mt-3 p-3.5 rounded-xl bg-rose-100/80 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 flex items-center justify-between';
+                bannerIcon.className = 'fa-solid fa-triangle-exclamation text-xl text-rose-600 dark:text-rose-400';
+                bannerTitulo.className = 'block text-xs font-bold uppercase tracking-wider text-rose-800 dark:text-rose-300';
+                bannerTitulo.textContent = 'Faltante de Caja';
+                bannerSub.className = 'text-xs text-rose-700 dark:text-rose-400';
+                bannerSub.textContent = 'Verificar retiros sin registrar o arqueo';
+                bannerMonto.className = 'text-lg font-extrabold text-rose-800 dark:text-rose-300';
+            }
+        }
+
+        // ==========================================
+        // 4. GRÁFICOS INTERACTIVOS (CHART.JS)
+        // ==========================================
+        function inicializarGrafico() {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Ventas Efectivo', 'Ventas Débito / Tarjeta'],
+                    datasets: [{
+                        data: [0, 0],
+                        backgroundColor: ['#10b981', '#6366f1'],
+                        borderColor: 'transparent',
+                        borderWidth: 2,
+                        hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '66%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 16,
+                                color: document.documentElement.classList.contains('dark') ? '#cbd5e1' : '#334155',
+                                font: { family: 'Inter', size: 12, weight: '600' }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    const val = context.raw || 0;
+                                    return ` ${context.label}: ${formatMoney(val)}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function cambiarGrafico(tipo) {
+            tipoGraficoActual = tipo;
+            const tabMedios = document.getElementById('tab-chart-medios');
+            const tabDenom = document.getElementById('tab-chart-denom');
+
+            if (tipo === 'medios') {
+                tabMedios.className = 'px-2.5 py-1 rounded-md font-medium bg-white dark:bg-slate-700 text-indigo-600 dark:text-cyan-300 shadow-sm transition';
+                tabDenom.className = 'px-2.5 py-1 rounded-md font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 transition';
+            } else {
+                tabDenom.className = 'px-2.5 py-1 rounded-md font-medium bg-white dark:bg-slate-700 text-indigo-600 dark:text-cyan-300 shadow-sm transition';
+                tabMedios.className = 'px-2.5 py-1 rounded-md font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 transition';
+            }
+
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#cbd5e1' : '#334155';
+
+            if (tipo === 'medios') {
+                chartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Ventas Efectivo', 'Ventas Débito / Tarjeta'],
+                        datasets: [{
+                            data: [0, 0],
+                            backgroundColor: ['#10b981', '#6366f1'],
+                            borderColor: 'transparent',
+                            hoverOffset: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '66%',
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { usePointStyle: true, padding: 16, color: textColor, font: { family: 'Inter', size: 12, weight: '600' } }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: ctx => ` ${ctx.label}: ${formatMoney(ctx.raw)}`
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                chartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['$20k', '$10k', '$5k', '$2k', '$1k', '$500', '$100', '$50', '$10'],
+                        datasets: [{
+                            label: 'Monto en Caja (CLP)',
+                            data: [],
+                            backgroundColor: [
+                                '#059669', '#10b981', '#0d9488', '#06b6d4', '#0284c7',
+                                '#4f46e5', '#6366f1', '#7c3aed', '#8b5cf6'
+                            ],
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: ctx => ` Subtotal: ${formatMoney(ctx.raw)}`
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: { color: textColor, font: { size: 11 } },
+                                grid: { display: false }
+                            },
+                            y: {
+                                ticks: {
+                                    color: textColor,
+                                    font: { size: 10 },
+                                    callback: val => '$' + (val / 1000) + 'k'
+                                },
+                                grid: { color: isDark ? 'rgba(148,163,184,0.1)' : 'rgba(148,163,184,0.2)' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            actualizarTodo();
+        }
+
+        function actualizarDatosGrafico({ ventasEfectivo, ventasDebito }) {
+            if (!chartInstance) return;
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#cbd5e1' : '#334155';
+
+            if (tipoGraficoActual === 'medios') {
+                const hayDatos = (ventasEfectivo + ventasDebito) > 0;
+                chartInstance.data.datasets[0].data = hayDatos ? [ventasEfectivo, ventasDebito] : [1, 1];
+                chartInstance.data.datasets[0].backgroundColor = hayDatos ? ['#10b981', '#6366f1'] : ['#cbd5e1', '#e2e8f0'];
+                chartInstance.options.plugins.legend.labels.color = textColor;
+            } else {
+                const todas = [...BILLETES, ...MONEDAS];
+                chartInstance.data.datasets[0].data = todas.map(d => (conteoDenominaciones[d.valor] || 0) * d.valor);
+                chartInstance.options.scales.x.ticks.color = textColor;
+                chartInstance.options.scales.y.ticks.color = textColor;
+            }
+            chartInstance.update();
+        }
+
+        // ==========================================
+        // 5. VISTA PREVIA Y GENERACIÓN DE PDF
+        // ==========================================
+        function abrirVistaPreviaPDF() {
+            poblarDatosReportePDF();
+            document.getElementById('modal-pdf').classList.remove('hidden');
+        }
+
+        function cerrarModalPDF() {
+            document.getElementById('modal-pdf').classList.add('hidden');
+        }
+
+        function poblarDatosReportePDF() {
+            const sucursal = document.getElementById('input-sucursal').value || 'Farmacia';
+            const fechaRaw = document.getElementById('input-fecha').value;
+            const turno = document.getElementById('input-turno').value;
+            const cajero = document.getElementById('input-cajero').value || 'Sin especificar';
+            const observaciones = document.getElementById('input-observaciones').value.trim();
+
+            const fondoInicial = parseFloat(document.getElementById('input-fondo-inicial').value) || 0;
+            const ventasEfectivo = parseFloat(document.getElementById('input-ventas-efectivo').value) || 0;
+            const ventasDebito = parseFloat(document.getElementById('input-ventas-debito').value) || 0;
+            const egresos = parseFloat(document.getElementById('input-egresos').value) || 0;
+            const ventaTotalPOS = parseFloat(document.getElementById('input-venta-total-pos').value) || 0;
+            const boletas = parseInt(document.getElementById('input-boletas').value, 10) || 0;
+
+            // Formatear fecha DD/MM/YYYY
+            let fechaLegible = fechaRaw;
+            if (fechaRaw && fechaRaw.includes('-')) {
+                const [y, m, d] = fechaRaw.split('-');
+                fechaLegible = `${d}/${m}/${y}`;
+            }
+
+            // Folio único basado en fecha
+            const folio = `#FC-${fechaRaw ? fechaRaw.replace(/-/g, '') : '2026'}-${Math.floor(100 + Math.random() * 899)}`;
+
+            document.getElementById('pdf-sucursal').textContent = sucursal;
+            document.getElementById('pdf-folio').textContent = folio;
+            document.getElementById('pdf-fecha').textContent = fechaLegible;
+            document.getElementById('pdf-turno').textContent = turno;
+            document.getElementById('pdf-cajero').textContent = cajero;
+            document.getElementById('pdf-firma-cajero').textContent = cajero;
+
+            // Tabla de Arqueo (Billetes + Monedas)
+            let totalBilletes = 0;
+            let totalMonedas = 0;
+            let filasHTML = '';
+
+            BILLETES.forEach(b => {
+                const c = conteoDenominaciones[b.valor] || 0;
+                const sub = c * b.valor;
+                totalBilletes += sub;
+                filasHTML += `
+                    <tr>
+                        <td class="border border-slate-200 py-1 px-2.5 text-slate-700">Billete ${b.etiqueta}</td>
+                        <td class="border border-slate-200 py-1 px-2.5 text-center font-medium">${c}</td>
+                        <td class="border border-slate-200 py-1 px-2.5 text-right font-semibold">${formatMoney(sub)}</td>
+                    </tr>
+                `;
+            });
+
+            MONEDAS.forEach(m => {
+                const c = conteoDenominaciones[m.valor] || 0;
+                const sub = c * m.valor;
+                totalMonedas += sub;
+                filasHTML += `
+                    <tr class="bg-slate-50/50">
+                        <td class="border border-slate-200 py-1 px-2.5 text-slate-700">Moneda ${m.etiqueta}</td>
+                        <td class="border border-slate-200 py-1 px-2.5 text-center font-medium">${c}</td>
+                        <td class="border border-slate-200 py-1 px-2.5 text-right font-semibold">${formatMoney(sub)}</td>
+                    </tr>
+                `;
+            });
+
+            const totalFisico = totalBilletes + totalMonedas;
+            const efectivoEsperado = fondoInicial + ventasEfectivo - egresos;
+            const diferencia = totalFisico - efectivoEsperado;
+            const retiroBoveda = Math.max(0, totalFisico - fondoInicial);
+            const ticketProm = boletas > 0 ? ventaTotalPOS / boletas : 0;
+
+            document.getElementById('pdf-tabla-arqueo').innerHTML = filasHTML;
+            document.getElementById('pdf-total-arqueo').textContent = formatMoney(totalFisico);
+
+            // KPIs PDF
+            document.getElementById('pdf-kpi-venta').textContent = formatMoney(ventaTotalPOS);
+            document.getElementById('pdf-kpi-debito').textContent = formatMoney(ventasDebito);
+            document.getElementById('pdf-kpi-fisico').textContent = formatMoney(totalFisico);
+
+            const signo = diferencia > 0 ? '+' : '';
+            const difTexto = `${signo}${formatMoney(diferencia)}`;
+            document.getElementById('pdf-kpi-diferencia').textContent = difTexto;
+
+            // Tabla Resumen Contable PDF
+            document.getElementById('pdf-res-fondo').textContent = formatMoney(fondoInicial);
+            document.getElementById('pdf-res-ventas-ef').textContent = formatMoney(ventasEfectivo);
+            document.getElementById('pdf-res-egresos').textContent = `-${formatMoney(egresos)}`;
+            document.getElementById('pdf-res-esperado').textContent = formatMoney(efectivoEsperado);
+            document.getElementById('pdf-res-fisico').textContent = formatMoney(totalFisico);
+            document.getElementById('pdf-res-diferencia').textContent = difTexto;
+
+            const estadoTexto = diferencia === 0 ? 'CUADRADO' : (diferencia > 0 ? 'SOBRANTE' : 'FALTANTE');
+            document.getElementById('pdf-res-estado').textContent = estadoTexto;
+
+            // Estilos dinámicos según estado en PDF
+            const boxDiff = document.getElementById('pdf-kpi-diff-box');
+            const rowDiff = document.getElementById('pdf-res-diff-row');
+            if (diferencia === 0) {
+                boxDiff.className = 'p-3 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800';
+                rowDiff.className = 'bg-emerald-50 font-extrabold text-emerald-900';
+            } else if (diferencia > 0) {
+                boxDiff.className = 'p-3 rounded-lg bg-indigo-50 border border-indigo-300 text-indigo-800';
+                rowDiff.className = 'bg-indigo-50 font-extrabold text-indigo-900';
+            } else {
+                boxDiff.className = 'p-3 rounded-lg bg-rose-50 border border-rose-300 text-rose-800';
+                rowDiff.className = 'bg-rose-50 font-extrabold text-rose-900';
+            }
+
+            document.getElementById('pdf-desglose-bm').textContent = `${formatMoney(totalBilletes)} / ${formatMoney(totalMonedas)}`;
+            document.getElementById('pdf-retiro-boveda').textContent = formatMoney(retiroBoveda);
+            document.getElementById('pdf-boletas-prom').textContent = `${boletas} / ${formatMoney(ticketProm)}`;
+            document.getElementById('pdf-observaciones').textContent = observaciones || 'Sin observaciones o egresos adicionales registrados.';
+
+            const ahora = new Date();
+            document.getElementById('pdf-timestamp').textContent = `Emitido el ${ahora.toLocaleDateString('es-CL')} a las ${ahora.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`;
+        }
+
+        function descargarPDFDirecto() {
+            const elemento = document.getElementById('printable-report-area');
+            const fecha = document.getElementById('input-fecha').value || 'cierre';
+            const btn = document.getElementById('btn-descargar-pdf');
+            const textoOriginal = btn.innerHTML;
+
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generando...';
+            btn.disabled = true;
+
+            const opciones = {
+                margin: [8, 8, 8, 8],
+                filename: `Conciliacion_Caja_Farmacia_${fecha}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, logging: false },
+                jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opciones).from(elemento).save().then(() => {
+                btn.innerHTML = textoOriginal;
+                btn.disabled = false;
+                mostrarToast('Reporte PDF descargado correctamente', 'success');
+            }).catch(err => {
+                console.error('Error al generar PDF:', err);
+                btn.innerHTML = textoOriginal;
+                btn.disabled = false;
+                mostrarToast('Abriendo diálogo de impresión alternativo...', 'info');
+                window.print();
+            });
+        }
+
+        function imprimirReporteNativo() {
+            window.print();
+        }
+
+        // ==========================================
+        // 6. UTILIDADES: EJEMPLO, REINICIO, TEMA Y STORAGE
+        // ==========================================
+        function cargarDatosEjemplo() {
+            // Simulación realista de un turno exitoso de farmacia en Chile
+            document.getElementById('input-sucursal').value = 'Farmacia Salud & Vida - Sucursal Providencia';
+            document.getElementById('input-turno').value = 'Día Completo (08:00 - 22:00)';
+            document.getElementById('input-cajero').value = 'Q.F. Sebastián Rojas';
+            document.getElementById('input-fondo-inicial').value = 60000;
+            document.getElementById('input-ventas-efectivo').value = 348500;
+            document.getElementById('input-ventas-debito').value = 892400;
+            document.getElementById('input-egresos').value = 12500;
+            document.getElementById('input-boletas').value = 84;
+            document.getElementById('chk-autosuma-pos').checked = true;
+            document.getElementById('input-observaciones').value = 'Egreso de $12.500 por despacho urgente de recetas magistrales.';
+
+            // Efectivo esperado = 60.000 + 348.500 - 12.500 = $396.000
+            // Distribución realista de billetes y monedas que suma exactamente $396.000
+            const ejemploConteo = {
+                20000: 11, // 220.000
+                10000: 9,  //  90.000
+                5000: 8,   //  40.000
+                2000: 10,  //  20.000
+                1000: 8,   //   8.000 -> Subtotal Billetes = 378.000
+                500: 22,   //  11.000
+                100: 55,   //   5.500
+                50: 24,    //   1.200
+                10: 30     //     300 -> Subtotal Monedas = 18.000 (Total = 396.000)
+            };
+
+            Object.keys(ejemploConteo).forEach(denom => {
+                conteoDenominaciones[denom] = ejemploConteo[denom];
+                const inputEl = document.getElementById(`cant-${denom}`);
+                if (inputEl) inputEl.value = ejemploConteo[denom];
+            });
+
+            actualizarTodo();
+            mostrarToast('Datos de ejemplo cargados (Caja cuadrada en $396.000)', 'success');
+        }
+
+        function limpiarArqueo() {
+            [...BILLETES, ...MONEDAS].forEach(d => {
+                conteoDenominaciones[d.valor] = 0;
+                const inputEl = document.getElementById(`cant-${d.valor}`);
+                if (inputEl) inputEl.value = 0;
+            });
+            actualizarTodo();
+            mostrarToast('Conteo de billetes y monedas reiniciado a $0', 'info');
+        }
+
+        function solicitarReinicio() {
+            document.getElementById('modal-confirmar-reinicio').classList.remove('hidden');
+        }
+
+        function cerrarModalReinicio() {
+            document.getElementById('modal-confirmar-reinicio').classList.add('hidden');
+        }
+
+        function ejecutarReinicioCompleto() {
+            [...BILLETES, ...MONEDAS].forEach(d => {
+                conteoDenominaciones[d.valor] = 0;
+                const inputEl = document.getElementById(`cant-${d.valor}`);
+                if (inputEl) inputEl.value = 0;
+            });
+
+            document.getElementById('input-fondo-inicial').value = 50000;
+            document.getElementById('input-ventas-efectivo').value = 0;
+            document.getElementById('input-ventas-debito').value = 0;
+            document.getElementById('input-egresos').value = 0;
+            document.getElementById('input-venta-total-pos').value = 0;
+            document.getElementById('input-boletas').value = 0;
+            document.getElementById('input-observaciones').value = '';
+
+            cerrarModalReinicio();
+            actualizarTodo();
+            mostrarToast('Todos los valores del turno fueron reiniciados', 'info');
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const icon = document.getElementById('theme-icon');
+            html.classList.toggle('dark');
+
+            if (html.classList.contains('dark')) {
+                icon.className = 'fa-solid fa-sun';
+                localStorage.setItem('farmacontrol_theme', 'dark');
+            } else {
+                icon.className = 'fa-solid fa-moon';
+                localStorage.setItem('farmacontrol_theme', 'light');
+            }
+            actualizarTodo();
+        }
+
+        function guardarEnLocalStorage() {
+            try {
+                const estado = {
+                    sucursal: document.getElementById('input-sucursal').value,
+                    fecha: document.getElementById('input-fecha').value,
+                    turno: document.getElementById('input-turno').value,
+                    cajero: document.getElementById('input-cajero').value,
+                    fondo: document.getElementById('input-fondo-inicial').value,
+                    ventasEf: document.getElementById('input-ventas-efectivo').value,
+                    ventasDeb: document.getElementById('input-ventas-debito').value,
+                    egresos: document.getElementById('input-egresos').value,
+                    ventaTotal: document.getElementById('input-venta-total-pos').value,
+                    boletas: document.getElementById('input-boletas').value,
+                    obs: document.getElementById('input-observaciones').value,
+                    autoSuma: document.getElementById('chk-autosuma-pos').checked,
+                    conteo: conteoDenominaciones
+                };
+                localStorage.setItem('farmacontrol_data_v1', JSON.stringify(estado));
+            } catch (e) {
+                // Ignorar errores de cuota si ocurren
+            }
+        }
+
+        function cargarDesdeLocalStorage() {
+            try {
+                const savedTheme = localStorage.getItem('farmacontrol_theme');
+                if (savedTheme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                    document.getElementById('theme-icon').className = 'fa-solid fa-sun';
+                }
+
+                const raw = localStorage.getItem('farmacontrol_data_v1');
+                if (!raw) return;
+                const data = JSON.parse(raw);
+
+                if (data.sucursal) document.getElementById('input-sucursal').value = data.sucursal;
+                if (data.fecha) document.getElementById('input-fecha').value = data.fecha;
+                if (data.turno) document.getElementById('input-turno').value = data.turno;
+                if (data.cajero) document.getElementById('input-cajero').value = data.cajero;
+                if (data.fondo !== undefined) document.getElementById('input-fondo-inicial').value = data.fondo;
+                if (data.ventasEf !== undefined) document.getElementById('input-ventas-efectivo').value = data.ventasEf;
+                if (data.ventasDeb !== undefined) document.getElementById('input-ventas-debito').value = data.ventasDeb;
+                if (data.egresos !== undefined) document.getElementById('input-egresos').value = data.egresos;
+                if (data.ventaTotal !== undefined) document.getElementById('input-venta-total-pos').value = data.ventaTotal;
+                if (data.boletas !== undefined) document.getElementById('input-boletas').value = data.boletas;
+                if (data.obs !== undefined) document.getElementById('input-observaciones').value = data.obs;
+                if (data.autoSuma !== undefined) document.getElementById('chk-autosuma-pos').checked = data.autoSuma;
+
+                if (data.conteo) {
+                    Object.keys(data.conteo).forEach(k => {
+                        conteoDenominaciones[k] = data.conteo[k];
+                        const el = document.getElementById(`cant-${k}`);
+                        if (el) el.value = data.conteo[k];
+                    });
+                }
+            } catch (e) {
+                console.warn('No se pudo restaurar sesión previa:', e);
+            }
+        }
+
+        // Sistema de Notificaciones Toast Elegante
+        function mostrarToast(mensaje, tipo = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+
+            const colores = tipo === 'success'
+                ? 'bg-emerald-600 text-white border-emerald-500'
+                : 'bg-slate-800 text-white border-slate-700';
+            const icono = tipo === 'success' ? 'fa-circle-check' : 'fa-circle-info';
+
+            toast.className = `pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold transform transition-all duration-300 translate-y-2 opacity-0 ${colores}`;
+            toast.innerHTML = `<i class="fa-solid ${icono}"></i><span>${mensaje}</span>`;
+
+            container.appendChild(toast);
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3200);
+        }
+    </script>
+</body>
+</html>
