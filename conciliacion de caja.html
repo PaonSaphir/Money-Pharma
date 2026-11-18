@@ -14,6 +14,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- html2pdf.js para descarga directa de PDF limpio -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- SheetJS (xlsx) para exportación del resumen a Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- FontAwesome para iconografía médica/financiera -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
@@ -140,6 +142,10 @@
                 </button>
 
                 <!-- Botón Principal Exportar PDF -->
+                <button onclick="exportarExcel()" class="px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-500/25 transition flex items-center gap-2">
+                    <i class="fa-solid fa-file-excel"></i>
+                    <span>Exportar Excel</span>
+                </button>
                 <button onclick="abrirVistaPreviaPDF()" class="px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white bg-gradient-pharma hover:opacity-95 shadow-md shadow-indigo-500/25 transition flex items-center gap-2">
                     <i class="fa-solid fa-file-pdf"></i>
                     <span>Exportar PDF</span>
@@ -555,6 +561,9 @@
                 <div class="flex items-center gap-2">
                     <button onclick="imprimirReporteNativo()" class="px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 transition flex items-center gap-1.5">
                         <i class="fa-solid fa-print"></i> Imprimir
+                    </button>
+                    <button onclick="exportarExcel()" class="px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-file-excel"></i> Exportar Excel
                     </button>
                     <button id="btn-descargar-pdf" onclick="descargarPDFDirecto()" class="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-pharma hover:opacity-95 shadow-md transition flex items-center gap-1.5">
                         <i class="fa-solid fa-download"></i> Descargar PDF
@@ -1379,6 +1388,148 @@
 
         function imprimirReporteNativo() {
             window.print();
+        }
+
+        // ==========================================
+        // 5B. EXPORTACIÓN DEL RESUMEN A EXCEL (XLSX)
+        // ==========================================
+        function calcularDatosConciliacion() {
+            const sucursal = document.getElementById('input-sucursal').value || 'Farmacia';
+            const fechaRaw = document.getElementById('input-fecha').value;
+            const turno = document.getElementById('input-turno').value;
+            const cajero = document.getElementById('input-cajero').value || 'Sin especificar';
+            const observaciones = document.getElementById('input-observaciones').value.trim();
+
+            const fondoInicial = parseFloat(document.getElementById('input-fondo-inicial').value) || 0;
+            const ventasEfectivo = parseFloat(document.getElementById('input-ventas-efectivo').value) || 0;
+            const ventasDebito = parseFloat(document.getElementById('input-ventas-debito').value) || 0;
+            const egresos = parseFloat(document.getElementById('input-egresos').value) || 0;
+            const ventaTotalPOS = parseFloat(document.getElementById('input-venta-total-pos').value) || 0;
+            const boletas = parseInt(document.getElementById('input-boletas').value, 10) || 0;
+
+            let totalBilletes = 0;
+            let cantBilletes = 0;
+            BILLETES.forEach(b => {
+                const c = conteoDenominaciones[b.valor] || 0;
+                totalBilletes += c * b.valor;
+                cantBilletes += c;
+            });
+
+            let totalMonedas = 0;
+            let cantMonedas = 0;
+            MONEDAS.forEach(m => {
+                const c = conteoDenominaciones[m.valor] || 0;
+                totalMonedas += c * m.valor;
+                cantMonedas += c;
+            });
+
+            const totalFisico = totalBilletes + totalMonedas;
+            const efectivoEsperado = fondoInicial + ventasEfectivo - egresos;
+            const diferencia = totalFisico - efectivoEsperado;
+            const retiroBoveda = Math.max(0, totalFisico - fondoInicial);
+            const ticketPromedio = boletas > 0 ? ventaTotalPOS / boletas : 0;
+            const estadoTexto = diferencia === 0 ? 'CUADRADO' : (diferencia > 0 ? 'SOBRANTE' : 'FALTANTE');
+
+            return {
+                sucursal, fechaRaw, turno, cajero, observaciones,
+                fondoInicial, ventasEfectivo, ventasDebito, egresos,
+                ventaTotalPOS, boletas,
+                totalBilletes, cantBilletes, totalMonedas, cantMonedas,
+                totalFisico, efectivoEsperado, diferencia, retiroBoveda,
+                ticketPromedio, estadoTexto
+            };
+        }
+
+        function exportarExcel() {
+            if (typeof XLSX === 'undefined') {
+                mostrarToast('No se pudo cargar la librería de Excel. Revisa tu conexión a internet.', 'error');
+                return;
+            }
+
+            try {
+                const d = calcularDatosConciliacion();
+
+                // Formatear fecha DD/MM/YYYY
+                let fechaLegible = d.fechaRaw;
+                if (d.fechaRaw && d.fechaRaw.includes('-')) {
+                    const [y, m, dd] = d.fechaRaw.split('-');
+                    fechaLegible = `${dd}/${m}/${y}`;
+                }
+
+                const wb = XLSX.utils.book_new();
+
+                // --- Hoja 1: Resumen Contable ---
+                const resumenAOA = [
+                    ['CONCILIACIÓN DE CAJA — RESUMEN'],
+                    [],
+                    ['Sucursal', d.sucursal],
+                    ['Fecha', fechaLegible],
+                    ['Turno', d.turno],
+                    ['Responsable (Cajero)', d.cajero],
+                    ['Estado de Cuadratura', d.estadoTexto],
+                    [],
+                    ['RESUMEN CONTABLE', 'Monto (CLP)'],
+                    ['Fondo Inicial (Gaveta)', d.fondoInicial],
+                    ['Ventas Efectivo', d.ventasEfectivo],
+                    ['Egresos / Retiros', -d.egresos],
+                    ['Efectivo Esperado en Caja', d.efectivoEsperado],
+                    ['Efectivo Físico Contado (Arqueo)', d.totalFisico],
+                    ['DIFERENCIA (Físico - Esperado)', d.diferencia],
+                    [],
+                    ['Retiro a Bóveda', d.retiroBoveda],
+                    ['Ventas Débito / Transferencias', d.ventasDebito],
+                    ['Venta Total POS', d.ventaTotalPOS],
+                    ['Boletas Emitidas', d.boletas],
+                    ['Ticket Promedio', Math.round(d.ticketPromedio)],
+                    [],
+                    ['Observaciones', d.observaciones || 'Sin observaciones registradas.']
+                ];
+                const wsResumen = XLSX.utils.aoa_to_sheet(resumenAOA);
+                wsResumen['!cols'] = [{ wch: 34 }, { wch: 22 }];
+                XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+
+                // --- Hoja 2: Arqueo de Denominaciones ---
+                const arqueoAOA = [
+                    ['ARQUEO DE EFECTIVO (DENOMINACIONES)'],
+                    [],
+                    ['Tipo', 'Denominación', 'Cantidad', 'Subtotal (CLP)']
+                ];
+                BILLETES.forEach(b => {
+                    const c = conteoDenominaciones[b.valor] || 0;
+                    arqueoAOA.push(['Billete', b.etiqueta, c, c * b.valor]);
+                });
+                MONEDAS.forEach(m => {
+                    const c = conteoDenominaciones[m.valor] || 0;
+                    arqueoAOA.push(['Moneda', m.etiqueta, c, c * m.valor]);
+                });
+                arqueoAOA.push([]);
+                arqueoAOA.push(['Totales', `Billetes: ${formatMoney(d.totalBilletes)} / Monedas: ${formatMoney(d.totalMonedas)}`, d.cantBilletes + d.cantMonedas, d.totalFisico]);
+                const wsArqueo = XLSX.utils.aoa_to_sheet(arqueoAOA);
+                wsArqueo['!cols'] = [{ wch: 12 }, { wch: 46 }, { wch: 10 }, { wch: 16 }];
+                XLSX.utils.book_append_sheet(wb, wsArqueo, 'Arqueo');
+
+                // Formato de moneda CLP para las columnas numéricas
+                const formatoMoneda = '"$"#,##0';
+                const aplicarFormato = (ws, celdas) => {
+                    celdas.forEach(ref => {
+                        if (ws[ref] && typeof ws[ref].v === 'number') {
+                            ws[ref].z = formatoMoneda;
+                        }
+                    });
+                };
+                aplicarFormato(wsResumen, ['B10', 'B11', 'B12', 'B13', 'B14', 'B15', 'B17', 'B18', 'B19', 'B21']);
+                aplicarFormato(wsArqueo, wsArqueo['!ref']
+                    ? Object.keys(wsArqueo)
+                        .filter(k => k.startsWith('D') && !k.startsWith('!'))
+                    : []);
+
+                const nombreArchivo = `Conciliacion_Caja_${(d.fechaRaw || 'cierre').replace(/-/g, '')}.xlsx`;
+                XLSX.writeFile(wb, nombreArchivo);
+                mostrarToast(`Resumen exportado a Excel: ${nombreArchivo}`, 'success');
+            } catch (err) {
+                console.error('Error al exportar a Excel:', err);
+                mostrarToast('Ocurrió un error al generar el archivo Excel.', 'error');
+            }
         }
 
         // ==========================================
